@@ -3,6 +3,7 @@ import re
 from typing import Callable, Dict, List, Any
 import requests  # For Ollama's REST API
 
+# need to run `ollama serve` first
 OLLAMA_API_URL = "http://localhost:11434/api/generate"  # Default Ollama API endpoint
 
 def make_r1_zero_prompt(question: str) -> str:
@@ -13,7 +14,6 @@ def ollama_generate(
     model: str,
     prompt: str,
     temperature: float = 1.0,
-    max_tokens: int = 1024,
 ) -> str:
     """Generate text using Ollama's API"""
     payload = {
