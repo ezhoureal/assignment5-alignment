@@ -85,9 +85,10 @@ response_mask: torch.Tensor,
 gradient_accumulation_steps: int,
 normalize_constant: float = 1.0,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    loss = -masked_normalize(policy_log_probs, response_mask, normalize_constant)
+    loss = -masked_normalize(policy_log_probs, response_mask, normalize_constant, dim=-1)
+    loss = torch.mean(loss)
     if gradient_accumulation_steps > 1:
-        loss /= gradient_accumulation_steps * 2
+        loss /= gradient_accumulation_steps
     # Compute the gradients
     loss.backward()
     return loss, {"sum": sum}
