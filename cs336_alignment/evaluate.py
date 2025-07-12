@@ -25,7 +25,6 @@ def ollama_generate(
             "num_predict": max_tokens,
             "stop": ["</answer>"],  # Stop generation at this token
         },
-        "template": "{{ .Prompt }}",  # Ensures stop sequence is included in output
     }
     
     response = requests.post(OLLAMA_API_URL, json=payload)
@@ -34,10 +33,27 @@ def ollama_generate(
 
 import re
 
-def extract_answer(completion: str) -> str:
-    """Extracts text between <answer> and </answer> tags"""
-    match = re.search(r'<answer>(.*?)</answer>', completion, re.DOTALL)
-    return match.group(1).strip() if match else ""
+def extract_answer(completion: str, include_closing_tag: bool = False) -> str:
+    """
+    Extract everything after <answer> in the completion.
+    
+    Args:
+        completion: Raw LLM output string
+        include_closing_tag: Whether to keep </answer> in the result
+    
+    Returns:
+        str: All text after <answer> (optionally including the closing tag)
+    """
+    pattern = r'<answer>(.*)'
+    match = re.search(pattern, completion, re.DOTALL)
+    
+    if not match:
+        return ""
+    result = match.group(1).strip()
+    if not include_closing_tag:
+        # Remove closing tag if present
+        result = result.replace('</answer>', '')
+    return result
 
 def evaluate_ollama(
     model: str,
@@ -56,15 +72,17 @@ def evaluate_ollama(
     }
     for prompt, ref in zip(prompts, references):
         completion = ollama_generate(model, prompt)
-        print(f'Generated completion: {completion}')
         completion = extract_answer(completion)
-        correct:bool = eval(completion.replace('×', '*').replace('÷', '/')) == ref
+        try:
+            correct: bool = eval(completion.replace('×', '*').replace('÷', '/')) == ref
+        except Exception as e:
+            print(f"Eval error for completion: {completion}\nError: {e}")
+            correct = False
         results.append({
-            "prompt": prompt,
+            # "prompt": prompt,
             "completion": completion,
             "reference": ref,
         })
-        print(f'Completion: {completion}, Reference: {ref}, Correct: {correct}')
         if correct:
             metrics_agg["correct"] += 1
         else:
@@ -100,7 +118,7 @@ def main():
     ds = load_dataset("Jiayi-Pan/Countdown-Tasks-3to4")
     for item in ds["train"]:
         math_data.append(item)
-    math_data = math_data[:2]  # Limit to first 2 examples for testing
+    math_data = math_data[:10]  # Limit to first 10 examples for testing
     # 2. Prepare prompts and references
     prompts = [make_r1_zero_prompt(format_prompt(item)) for item in math_data]
 

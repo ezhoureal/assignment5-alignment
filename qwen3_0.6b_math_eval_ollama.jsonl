@@ -1,0 +1,10 @@
+{"completion": "44 + 35 + 19", "reference": 98}
+{"completion": "63 + (96 - 95)", "reference": 64}
+{"completion": "95 - 56 - 11", "reference": 28}
+{"completion": "74 - 45 + 19", "reference": 48}
+{"completion": "41 - (73 - 49)", "reference": 17}
+{"completion": "48 + (42 - 28)", "reference": 62}
+{"completion": "", "reference": 82}
+{"completion": "67 + 31", "reference": 98}
+{"completion": "", "reference": 40}
+{"completion": "", "reference": 65}
