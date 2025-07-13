@@ -197,26 +197,30 @@ for i in tqdm.trange(n_grpo_steps, desc="GRPO training steps"):
     # randomly select data points
     math_data = ds["train"].shuffle(seed=42).select(range(rollout_batch_size))
     ground_truths = [item["target"] for item in math_data]
-    prompts = [format_prompt(item) for item in math_data]
+    prompts = [make_r1_zero_prompt(format_prompt(item)) for item in math_data]
     # run ollama inference to obtain response
-    response = [prompt + ollama_generate(model_name, prompt) for prompt in prompts]
+    print(f'prompts = {prompts}')
+    response = [ollama_generate(model_name, prompt) for prompt in prompts]
     print(f'response = {response}')
-    # feed response to policy to get log probabilities
-    batch_sequence = tokenizer.encode(response)
-    old_log_probs = old_policy(batch_sequence).logits
-    old_log_probs = torch.nn.functional.log_softmax(old_log_probs, dim=-1)
-    
-    log_probs = policy(batch_sequence).logits
-    log_probs = torch.nn.functional.log_softmax(log_probs, dim=-1) # repeat while output != </answer>
+    tokenized = tokenize_prompt_and_output(prompts, response, tokenizer)
+    old_log_probs = get_response_log_probs(
+        old_policy,
+        input_ids=tokenized["input_ids"],
+        labels=tokenized["labels"],
+    )["log_probs"]
+    log_probs = get_response_log_probs(
+        policy,
+        input_ids=tokenized["input_ids"],
+        labels=tokenized["labels"],
+    )["log_probs"]
 
     advantage, raw_reward, log = compute_group_normalized_rewards(reward_fn=reward_func,
         rollout_responses=response, repeated_ground_truths=ground_truths,
         group_size=group_size, advantage_eps=advantage_eps,
         normalize_by_std=use_std_normalization)
-    response_mask = [1 if (idx + 1) >= len(prompts) else 0 for idx in range(len(response) - 1)]
     loss, log = grpo_microbatch_train_step(
         policy_log_probs=log_probs,
-        response_mask=response_mask,
+        response_mask=tokenized["response_mask"],
         gradient_accumulation_steps=gradient_accumulation_steps,
         loss_type=loss_type,
         raw_rewards=raw_reward,
