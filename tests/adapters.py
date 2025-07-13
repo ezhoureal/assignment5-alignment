@@ -200,7 +200,15 @@ def run_compute_policy_gradient_loss(
     """
     Wrapper that delegates to the appropriate policy gradient loss function above.
     """
-    raise NotImplementedError
+    from cs336_alignment.rl import compute_policy_gradient_loss
+    return compute_policy_gradient_loss(
+        policy_log_probs=policy_log_probs,
+        loss_type=loss_type,
+        raw_rewards=raw_rewards,
+        advantages=advantages,
+        old_log_probs=old_log_probs,
+        cliprange=cliprange,
+    )
 
 
 def run_masked_mean(tensor: torch.Tensor, mask: torch.Tensor, dim: int | None = None) -> torch.Tensor:
@@ -219,7 +227,12 @@ def run_masked_mean(tensor: torch.Tensor, mask: torch.Tensor, dim: int | None = 
         torch.Tensor, the mean of the tensor along the specified
             dimension, considering only the elements with mask value 1.
     """
-    raise NotImplementedError
+    from cs336_alignment.rl import masked_mean
+    return masked_mean(
+        tensor=tensor,
+        mask=mask,
+        dim=dim,
+    )
 
 def run_sft_microbatch_train_step(
     policy_log_probs: torch.Tensor,
@@ -274,9 +287,11 @@ def run_grpo_microbatch_train_step(
             the policy gradient loss and its metadata.
     """
     pass
-    from cs336_alignment.rl import compute_policy_gradient_loss
-    return compute_policy_gradient_loss(
+    from cs336_alignment.rl import grpo_microbatch_train_step
+    return grpo_microbatch_train_step(
         policy_log_probs=policy_log_probs,
+        response_mask=response_mask,
+        gradient_accumulation_steps=gradient_accumulation_steps,
         loss_type=loss_type,
         raw_rewards=raw_rewards,
         advantages=advantages,
