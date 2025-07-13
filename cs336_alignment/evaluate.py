@@ -118,7 +118,7 @@ def main():
     ds = load_dataset("Jiayi-Pan/Countdown-Tasks-3to4")
     for item in ds["train"]:
         math_data.append(item)
-    math_data = math_data[8:10]  # Limit to first 10 examples for testing
+    math_data = math_data[:10]  # Limit to first 10 examples for testing
     # 2. Prepare prompts and references
     prompts = [make_r1_zero_prompt(format_prompt(item)) for item in math_data]
 

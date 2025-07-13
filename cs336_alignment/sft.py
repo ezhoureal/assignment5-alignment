@@ -1,15 +1,3 @@
-# import torch
-# def tokenize_prompt_and_output(prompt_strs, output_strs, tokenizer):
-#     res = {"input_ids": torch.Tensor([]), "labels": torch.Tensor([]), "response_mask": torch.Tensor([])}
-#     for prompt, output in zip(prompt_strs, output_strs):
-#         prompt_tokens = tokenizer.encode(prompt)
-#         output_tokens = tokenizer.encode(output)
-#         chain = prompt_tokens + output_tokens
-#         res["input_ids"] = torch.cat((res["input_ids"], chain[:-1]), dim=0)
-#         res["labels"] = torch.cat((res["labels"], chain[1:]), dim=0)
-#         torch.if
-#     return res
-
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from typing import Dict, List

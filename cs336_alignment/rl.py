@@ -1,5 +1,8 @@
 from typing import Literal
 import torch
+from tqdm import tqdm
+
+from cs336_alignment.evaluate import format_prompt
 
 
 def compute_group_normalized_rewards(
@@ -143,3 +146,85 @@ cliprange: float | None= None,
 
     loss.backward()
     return loss, {**log, "response_mask": response_mask}
+
+# script
+n_grpo_steps: int = 200
+learning_rate: float = 1e-5
+advantage_eps: float = 1e-6
+rollout_batch_size: int = 256
+group_size: int = 4
+sampling_temperature: float = 1.0
+sampling_min_tokens: int = 4 # As in Expiter, disallow empty string responses
+sampling_max_tokens: int = 1024
+epochs_per_rollout_batch: int = 3 # On-policy
+train_batch_size: int = 256 # On-policy
+gradient_accumulation_steps: int = 128 # microbatch size is 2, will fit on H100
+gpu_memory_utilization: float = 0.85
+loss_type: Literal[
+"no_baseline",
+"reinforce_with_baseline",
+"grpo_clip",
+] = "reinforce_with_baseline"
+use_std_normalization: bool = True
+
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from datasets import load_dataset
+from evaluate import *
+from sft import *
+
+model_name = "Qwen/Qwen3-0.6B"  # Use a smaller model for testing
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+policy = AutoModelForCausalLM.from_pretrained(model_name)
+optimizer = torch.optim.AdamW(
+policy.parameters(),
+lr=learning_rate,
+weight_decay=0.0,
+betas=(0.9, 0.95),
+)
+old_policy = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
+
+reward_func = lambda response, ground_truth: {
+    "reward": eval(response.replace('×', '*').replace('÷', '/')) == ground_truth
+}
+
+math_data = []
+ds = load_dataset("Jiayi-Pan/Countdown-Tasks-3to4")
+for item in ds["train"]:
+    math_data.append(item)
+for i in tqdm.trange(n_grpo_steps, desc="GRPO training steps"):
+    if i % epochs_per_rollout_batch == 0:
+        old_policy.load_state_dict(policy.state_dict())
+    # randomly select data points
+    math_data = ds["train"].shuffle(seed=42).select(range(rollout_batch_size))
+    ground_truths = [item["target"] for item in math_data]
+    prompts = [format_prompt(item) for item in math_data]
+    # run ollama inference to obtain response
+    response = [prompt + ollama_generate(model_name, prompt) for prompt in prompts]
+    print(f'response = {response}')
+    # feed response to policy to get log probabilities
+    batch_sequence = tokenizer.encode(response)
+    old_log_probs = old_policy(batch_sequence).logits
+    old_log_probs = torch.nn.functional.log_softmax(old_log_probs, dim=-1)
+    
+    log_probs = policy(batch_sequence).logits
+    log_probs = torch.nn.functional.log_softmax(log_probs, dim=-1) # repeat while output != </answer>
+
+    advantage, raw_reward, log = compute_group_normalized_rewards(reward_fn=reward_func,
+        rollout_responses=response, repeated_ground_truths=ground_truths,
+        group_size=group_size, advantage_eps=advantage_eps,
+        normalize_by_std=use_std_normalization)
+    response_mask = [1 if (idx + 1) >= len(prompts) else 0 for idx in range(len(response) - 1)]
+    loss, log = grpo_microbatch_train_step(
+        policy_log_probs=log_probs,
+        response_mask=response_mask,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        loss_type=loss_type,
+        raw_rewards=raw_reward,
+        advantages=advantage,
+        old_log_probs=old_log_probs,
+    )
+    print(f'loss = {loss}')
+    if i % gradient_accumulation_steps == 0:
+        optimizer.step()
+        optimizer.zero_grad()
+       
