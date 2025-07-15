@@ -156,7 +156,7 @@ group_size: int = 4
 sampling_temperature: float = 1.0
 sampling_min_tokens: int = 4 # As in Expiter, disallow empty string responses
 sampling_max_tokens: int = 1024
-epochs_per_rollout_batch: int = 3 # On-policy
+epochs_per_rollout_batch: int = 3
 train_batch_size: int = 256 # On-policy
 gradient_accumulation_steps: int = 128 # microbatch size is 2, will fit on H100
 gpu_memory_utilization: float = 0.85
@@ -192,9 +192,8 @@ ds = load_dataset("Jiayi-Pan/Countdown-Tasks-3to4")
 for item in ds["train"]:
     math_data.append(item)
 for i in tqdm.trange(n_grpo_steps, desc="GRPO training steps"):
-    if i % epochs_per_rollout_batch == 0:
-        old_policy.load_state_dict(policy.state_dict())
-        # todo: use old_policy in ollama
+    old_policy.load_state_dict(policy.state_dict())
+    # todo: use old_policy in ollama
         
     # randomly select data points
     math_data = ds["train"].shuffle(seed=42).select(range(rollout_batch_size))
@@ -210,27 +209,28 @@ for i in tqdm.trange(n_grpo_steps, desc="GRPO training steps"):
         input_ids=tokenized["input_ids"],
         labels=tokenized["labels"],
     )["log_probs"]
-    log_probs = get_response_log_probs(
-        policy,
-        input_ids=tokenized["input_ids"],
-        labels=tokenized["labels"],
-    )["log_probs"]
+    for _ in range(epochs_per_rollout_batch):
+        log_probs = get_response_log_probs(
+            policy,
+            input_ids=tokenized["input_ids"],
+            labels=tokenized["labels"],
+        )["log_probs"]
 
-    advantage, raw_reward, log = compute_group_normalized_rewards(reward_fn=reward_func,
-        rollout_responses=response, repeated_ground_truths=ground_truths,
-        group_size=group_size, advantage_eps=advantage_eps,
-        normalize_by_std=use_std_normalization)
-    loss, log = grpo_microbatch_train_step(
-        policy_log_probs=log_probs,
-        response_mask=tokenized["response_mask"],
-        gradient_accumulation_steps=gradient_accumulation_steps,
-        loss_type=loss_type,
-        raw_rewards=raw_reward,
-        advantages=advantage,
-        old_log_probs=old_log_probs,
-    )
-    print(f'loss = {loss}')
-    if i % gradient_accumulation_steps == 0:
-        optimizer.step()
-        optimizer.zero_grad()
+        advantage, raw_reward, log = compute_group_normalized_rewards(reward_fn=reward_func,
+            rollout_responses=response, repeated_ground_truths=ground_truths,
+            group_size=group_size, advantage_eps=advantage_eps,
+            normalize_by_std=use_std_normalization)
+        loss, log = grpo_microbatch_train_step(
+            policy_log_probs=log_probs,
+            response_mask=tokenized["response_mask"],
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            loss_type=loss_type,
+            raw_rewards=raw_reward,
+            advantages=advantage,
+            old_log_probs=old_log_probs,
+        )
+        print(f'loss = {loss}')
+        if i % gradient_accumulation_steps == 0:
+            optimizer.step()
+            optimizer.zero_grad()
        
