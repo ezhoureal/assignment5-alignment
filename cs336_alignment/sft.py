@@ -3,7 +3,6 @@ from torch.nn.utils.rnn import pad_sequence
 from typing import Dict, List
 
 def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], tokenizer) -> Dict[str, torch.Tensor]:
-    batch_input_ids = []
     batch_sequence = []
     batch_response_mask = []
     

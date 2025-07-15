@@ -194,6 +194,8 @@ for item in ds["train"]:
 for i in tqdm.trange(n_grpo_steps, desc="GRPO training steps"):
     if i % epochs_per_rollout_batch == 0:
         old_policy.load_state_dict(policy.state_dict())
+        # todo: use old_policy in ollama
+        
     # randomly select data points
     math_data = ds["train"].shuffle(seed=42).select(range(rollout_batch_size))
     ground_truths = [item["target"] for item in math_data]
